@@ -43,6 +43,11 @@ def create_parser():
         default="",
         help="Подстрока для фильтрации пакетов.",
     )
+    parser.add_argument(
+        "--reverse",
+        action="store_true",
+        help="Режим вывода на экран обратных зависимостей для заданного пакета.",
+    )
     return parser
 
 
@@ -159,6 +164,30 @@ def print_graph(graph):
         deps_output = ", ".join(deps) if deps else "нет зависимостей"
         print(f"  {pkg} -> {deps_output}")
 
+
+def find_reverse_dependencies(target_pkg, args, test_data):
+    """Находит все пакеты, которые зависят от target_pkg, используя обход DFS."""
+    reverse_deps = []
+    for candidate in test_data:
+        if candidate == target_pkg:
+            continue
+        if args.filter and args.filter in candidate:
+            continue
+        visited = set()
+        temp_graph = {}
+        build_graph_dfs(candidate, args, test_data, visited, temp_graph)
+        if target_pkg in visited:
+            reverse_deps.append(candidate)
+    return reverse_deps
+
+def print_reverse_dependencies(target_pkg, reverse_deps):
+    """Выводит список обратных зависимостей для заданного пакета."""
+    print(f"Обратные зависимости для пакета '{target_pkg}' (что зависит от него):")
+    if reverse_deps:
+        print(f"  {', '.join(reverse_deps)}")
+    else:
+        print("  нет обратных зависимостей")
+
 def main():
     """Точка входа в программу."""
     parser = create_parser()
@@ -166,14 +195,17 @@ def main():
         args = parser.parse_args()
         validate_args(args)
         test_data = load_test_repo(args.repo) if args.test_mode else {}
-        visited = set()
-        graph = {}
-        build_graph_dfs(args.package, args, test_data, visited, graph)
-        print_graph(graph)
+        if args.reverse:
+            rev_deps = find_reverse_dependencies(args.package, args, test_data)
+            print_reverse_dependencies(args.package, rev_deps)
+        else:
+            visited = set()
+            graph = {}
+            build_graph_dfs(args.package, args, test_data, visited, graph)
+            print_graph(graph)
     except Exception as err:
         print(f"Ошибка конфигурации: {err}", file=sys.stderr)
         sys.exit(1)
-
 
 if __name__ == "__main__":
     main()
