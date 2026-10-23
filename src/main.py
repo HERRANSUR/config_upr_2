@@ -1,4 +1,4 @@
-"""Модуль конфигурации CLI для визуализатора графа зависимостей (Этап 1)."""
+"""Модуль конфигурации CLI для визуализатора графа зависимостей (Этап 3)."""
 
 import argparse
 import os
@@ -6,7 +6,6 @@ import sys
 import urllib.error
 import urllib.request
 import json
-
 
 def create_parser():
     """Создает и настраивает парсер аргументов командной строки."""
@@ -32,7 +31,7 @@ def create_parser():
     parser.add_argument(
         "--output",
         default="graph.png",
-        help="Имя сгенерированного файла с изображением графа, имя по умолчанию graph.png",
+        help="Имя выходного файла с изображением графа graph.png",
     )
     parser.add_argument(
         "--ascii-tree",
@@ -50,13 +49,13 @@ def create_parser():
 def validate_args(args):
     """Проверяет корректность всех введенных пользователем параметров."""
     if not args.package.strip():
-        raise ValueError("Имя пакета не может быть пустым, обязательное значение.")
+        raise ValueError("Имя пакета не может быть пустым.")
 
     if not args.version.strip():
-        raise ValueError("Версия пакета не может быть пустой, обязательное значение.")
+        raise ValueError("Версия пакета не может быть пустой")
 
     if not args.repo.strip():
-        raise ValueError("URL или путь к репозиторию не может быть пустым, обязательное значение.")
+        raise ValueError("URL или путь к репозиторию не может быть пустым")
 
     if args.test_mode:
         if not os.path.isfile(args.repo):
@@ -76,14 +75,13 @@ def validate_args(args):
         raise ValueError("Имя выходного файла должно заканчиваться на .png")
 
 def fetch_cargo_dependencies(repo_url, package, version):
-    """Извлекает прямые зависимости пакета Cargo по URL репозитория."""
+    """Извлекает прямые зависимости пакета Cargo по URL репозитория в словарь."""
     base_url = repo_url.rstrip("/")
     api_url = f"{base_url}/api/v1/crates/{package}/{version}/dependencies"
-    headers = {"User-Agent": "ConfigManagementLab/1.0"}
+    headers = {'User-Agent': 'ConfigManagementLab/1.0 (zzz@gmail.com)'}
     req = urllib.request.Request(api_url, headers=headers)
-
     try:
-        with urllib.request.urlopen(req, timeout=8) as response:
+        with urllib.request.urlopen(req, timeout=20) as response:
             raw_data = response.read().decode("utf-8")
             parsed_json = json.loads(raw_data)
     except urllib.error.HTTPError as err:
@@ -94,7 +92,7 @@ def fetch_cargo_dependencies(repo_url, package, version):
         raise RuntimeError(f"Ошибка сети при обращении к {api_url}") from err
     dependencies = []
     for dep in parsed_json.get("dependencies", []):
-        if dep.get("kind") == "normal":
+        if dep.get("kind") == "normal" and not dep.get("optional"):
             crate_id = dep.get("crate_id")
             if crate_id and crate_id not in dependencies:
                 dependencies.append(crate_id)
@@ -106,6 +104,60 @@ def print_config(args):
     for key, value in vars(args).items():
         print(f"{key} = {value}")
 
+def get_latest_version(repo_url, package):
+    """Узнает последнюю стабильную версию пакета в репозитории Cargo."""
+    base_url = repo_url.rstrip("/")
+    info_url = f"{base_url}/api/v1/crates/{package}"
+    headers = {'User-Agent': 'ConfigManagementLab/1.0 (zzz@gmail.com)'}
+    req = urllib.request.Request(info_url, headers=headers)
+    try:
+        with urllib.request.urlopen(req, timeout=15) as response:
+            data = json.loads(response.read().decode("utf-8"))
+            version = data["crate"]["max_stable_version"]
+            return version
+    except urllib.error.HTTPError as err:
+        raise RuntimeError(
+            f"Не удалось узнать версию пакета '{package}' (код {err.code})."
+        ) from err
+    except urllib.error.URLError as err:
+        raise RuntimeError(f"Ошибка сети при обращении к {info_url}") from err
+
+
+def load_test_repo(file_path):
+    """Читает граф тестового репозитория из локального JSON-файла."""
+    with open(file_path, "r", encoding="utf-8") as file:
+        return json.load(file)
+
+def build_graph_dfs(package, args, test_data, visited, graph):
+    """Рекурсивно строит граф зависимостей алгоритмом DFS."""
+    if package in visited:
+        return
+    visited.add(package)
+    if args.test_mode:
+        raw_deps = test_data.get(package, [])
+    else:
+        if package == args.package:
+            pkg_version = args.version
+        else:
+            pkg_version = get_latest_version(args.repo, package)
+        raw_deps = fetch_cargo_dependencies(args.repo, package, pkg_version)
+    filtered_deps = []
+    for dep in raw_deps:
+        if args.filter and args.filter in dep:
+            continue
+        filtered_deps.append(dep)
+    graph[package] = filtered_deps
+    for dep in filtered_deps:
+        if dep not in visited:
+            build_graph_dfs(dep, args, test_data, visited, graph)
+
+
+def print_graph(graph):
+    """Выводит построенный граф зависимостей на экран."""
+    print("Построенный граф зависимостей (DFS):")
+    for pkg, deps in graph.items():
+        deps_output = ", ".join(deps) if deps else "нет зависимостей"
+        print(f"  {pkg} -> {deps_output}")
 
 def main():
     """Точка входа в программу."""
@@ -113,13 +165,11 @@ def main():
     try:
         args = parser.parse_args()
         validate_args(args)
-        deps = fetch_cargo_dependencies(args.repo, args.package, args.version)
-        print(f"Прямые зависимости пакета {args.package} ({args.version}):")
-        if deps:
-            for dep in deps:
-                print(f"- {dep}")
-        else:
-            print("Зависимости отсутствуют.")
+        test_data = load_test_repo(args.repo) if args.test_mode else {}
+        visited = set()
+        graph = {}
+        build_graph_dfs(args.package, args, test_data, visited, graph)
+        print_graph(graph)
     except Exception as err:
         print(f"Ошибка конфигурации: {err}", file=sys.stderr)
         sys.exit(1)
