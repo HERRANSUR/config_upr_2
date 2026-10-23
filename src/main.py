@@ -3,6 +3,9 @@
 import argparse
 import os
 import sys
+import urllib.error
+import urllib.request
+import json
 
 
 def create_parser():
@@ -72,6 +75,31 @@ def validate_args(args):
     if not args.output.endswith(".png"):
         raise ValueError("Имя выходного файла должно заканчиваться на .png")
 
+def fetch_cargo_dependencies(repo_url, package, version):
+    """Извлекает прямые зависимости пакета Cargo по URL репозитория."""
+    base_url = repo_url.rstrip("/")
+    api_url = f"{base_url}/api/v1/crates/{package}/{version}/dependencies"
+    headers = {"User-Agent": "ConfigManagementLab/1.0"}
+    req = urllib.request.Request(api_url, headers=headers)
+
+    try:
+        with urllib.request.urlopen(req, timeout=8) as response:
+            raw_data = response.read().decode("utf-8")
+            parsed_json = json.loads(raw_data)
+    except urllib.error.HTTPError as err:
+        raise RuntimeError(
+            f"Пакет '{package}' версии '{version}' не найден (код {err.code})."
+        ) from err
+    except urllib.error.URLError as err:
+        raise RuntimeError(f"Ошибка сети при обращении к {api_url}") from err
+    dependencies = []
+    for dep in parsed_json.get("dependencies", []):
+        if dep.get("kind") == "normal":
+            crate_id = dep.get("crate_id")
+            if crate_id and crate_id not in dependencies:
+                dependencies.append(crate_id)
+
+    return dependencies
 
 def print_config(args):
     """Вывод параметров в формате ключ-значение."""
@@ -85,7 +113,13 @@ def main():
     try:
         args = parser.parse_args()
         validate_args(args)
-        print_config(args)
+        deps = fetch_cargo_dependencies(args.repo, args.package, args.version)
+        print(f"Прямые зависимости пакета {args.package} ({args.version}):")
+        if deps:
+            for dep in deps:
+                print(f"- {dep}")
+        else:
+            print("Зависимости отсутствуют.")
     except Exception as err:
         print(f"Ошибка конфигурации: {err}", file=sys.stderr)
         sys.exit(1)
