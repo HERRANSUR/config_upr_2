@@ -6,6 +6,9 @@ import sys
 import urllib.error
 import urllib.request
 import json
+import shutil
+import subprocess
+ONE_INDEX = 1
 
 def create_parser():
     """Создает и настраивает парсер аргументов командной строки."""
@@ -182,11 +185,68 @@ def find_reverse_dependencies(target_pkg, args, test_data):
 
 def print_reverse_dependencies(target_pkg, reverse_deps):
     """Выводит список обратных зависимостей для заданного пакета."""
-    print(f"Обратные зависимости для пакета '{target_pkg}' (что зависит от него):")
+    print(f"Обратные зависимости для пакета '{target_pkg}':")
     if reverse_deps:
         print(f"  {', '.join(reverse_deps)}")
     else:
         print("  нет обратных зависимостей")
+
+def generate_graphviz_dot(graph):
+    """Формирует текстовое представление графа на языке Graphviz."""
+    lines = ["digraph Dependencies {"]
+    lines.append('node [shape=box, style="rounded"];')
+    for pkg, deps in graph.items():
+        if not deps:
+            lines.append(f'"{pkg}";')
+        for dep in deps:
+            lines.append(f'"{pkg}" -> "{dep}";')
+    lines.append("}")
+    return "\n".join(lines)
+
+def save_graph_png(dot_code, output_path):
+    """Вызывает программу Graphviz и сохраняет изображение графа в файл PNG."""
+    dot_executable = r"C:\Program Files (x86)\Graphviz\bin\dot.exe"
+    try:
+        subprocess.run(
+            [dot_executable, "-Tpng", "-o", output_path],
+            input=dot_code,
+            text=True,
+            encoding="utf-8",
+            check=True,
+            capture_output=True,
+        )
+    except subprocess.CalledProcessError as err:
+        raise RuntimeError(f"Ошибка при генерации PNG: {err.stderr}") from err
+
+
+def print_ascii_tree(package, graph, prefix="", is_last=True, is_root=True, branch_visited=None):
+    """Рекурсивно выводит на экран зависимости в виде ASCII-дерева."""
+    if branch_visited is None:
+        branch_visited = set()
+    if is_root:
+        print(package)
+    else:
+        connector = "└── " if is_last else "├── "
+        if package in branch_visited:
+            print(f"{prefix}{connector}{package} (цикл)")
+            return
+        print(f"{prefix}{connector}{package}")
+    new_branch_visited = branch_visited | {package}
+    deps = graph.get(package, [])
+    if is_root:
+        child_prefix = ""
+    else:
+        child_prefix = prefix + ("    " if is_last else "│   ")
+    for index, dep in enumerate(deps):
+        is_last_child = index == len(deps) - ONE_INDEX
+        print_ascii_tree(
+            dep,
+            graph,
+            prefix=child_prefix,
+            is_last=is_last_child,
+            is_root=False,
+            branch_visited=new_branch_visited,
+        )
 
 def main():
     """Точка входа в программу."""
@@ -203,6 +263,13 @@ def main():
             graph = {}
             build_graph_dfs(args.package, args, test_data, visited, graph)
             print_graph(graph)
+            dot_code = generate_graphviz_dot(graph)
+            print("\nТекстовое представление графа (Graphviz DOT):")
+            print(dot_code)
+            save_graph_png(dot_code, args.output)
+            if args.ascii_tree:
+                print("\nДерево зависимостей (ASCII-tree):")
+                print_ascii_tree(args.package, graph)
     except Exception as err:
         print(f"Ошибка конфигурации: {err}", file=sys.stderr)
         sys.exit(1)
