@@ -8,6 +8,7 @@ import urllib.request
 import json
 import shutil
 import subprocess
+
 ONE_INDEX = 1
 
 def create_parser():
@@ -16,40 +17,34 @@ def create_parser():
         description="Визуализатор графа зависимостей пакетов Rust (Cargo)."
     )
     parser.add_argument(
-        "--package", required=True, help="Имя анализируемого пакета."
+        "--package", required=True, help="Имя пакета."
     )
     parser.add_argument(
-        "--repo",
-        required=True,
+        "--repo", required=True,
         help="URL репозитория или путь к файлу тестового репозитория.",
     )
     parser.add_argument(
-        "--test-mode",
-        action="store_true",
+        "--test-mode", action="store_true",
         help="Режим работы с тестовым репозиторием, работа с тестовым файлом.",
     )
     parser.add_argument(
-        "--version", required=True, help="Версия анализируемого пакета."
+        "--version", required=True, help="Версия пакета."
     )
     parser.add_argument(
-        "--output",
-        default="graph.png",
+        "--output", default="graph.png",
         help="Имя выходного файла с изображением графа graph.png",
     )
     parser.add_argument(
-        "--ascii-tree",
-        action="store_true",
+        "--ascii-tree", action="store_true",
         help="Режим вывода зависимостей в формате ASCII-дерева.",
     )
     parser.add_argument(
-        "--filter",
-        default="",
+        "--filter", default="",
         help="Подстрока для фильтрации пакетов.",
     )
     parser.add_argument(
-        "--reverse",
-        action="store_true",
-        help="Режим вывода на экран обратных зависимостей для заданного пакета.",
+        "--reverse", action="store_true",
+        help="Режим вывода на экран обратных зависимостей для пакета.",
     )
     return parser
 
@@ -83,7 +78,7 @@ def validate_args(args):
         raise ValueError("Имя выходного файла должно заканчиваться на .png")
 
 def fetch_cargo_dependencies(repo_url, package, version):
-    """Извлекает прямые зависимости пакета Cargo по URL репозитория в словарь."""
+    """Извлекает прямые зависимости пакета по URL репозитория в словарь."""
     base_url = repo_url.rstrip("/")
     api_url = f"{base_url}/api/v1/crates/{package}/{version}/dependencies"
     headers = {'User-Agent': 'ConfigManagementLab/1.0 (zzz@gmail.com)'}
@@ -169,7 +164,7 @@ def print_graph(graph):
 
 
 def find_reverse_dependencies(target_pkg, args, test_data):
-    """Находит все пакеты, которые зависят от target_pkg, используя обход DFS."""
+    """Находит пакеты, которые зависят от target_pkg, используя обход DFS."""
     reverse_deps = []
     for candidate in test_data:
         if candidate == target_pkg:
@@ -219,7 +214,8 @@ def save_graph_png(dot_code, output_path):
         raise RuntimeError(f"Ошибка при генерации PNG: {err.stderr}") from err
 
 
-def print_ascii_tree(package, graph, prefix="", is_last=True, is_root=True, branch_visited=None):
+def print_ascii_tree(package, graph, prefix="", is_last=True,
+                     is_root=True, branch_visited=None):
     """Рекурсивно выводит на экран зависимости в виде ASCII-дерева."""
     if branch_visited is None:
         branch_visited = set()
