@@ -11,6 +11,7 @@ import subprocess
 
 ONE_INDEX = 1
 
+
 def create_parser():
     """Создает и настраивает парсер аргументов командной строки."""
     parser = argparse.ArgumentParser(
@@ -77,6 +78,7 @@ def validate_args(args):
     if not args.output.endswith(".png"):
         raise ValueError("Имя выходного файла должно заканчиваться на .png")
 
+
 def fetch_cargo_dependencies(repo_url, package, version):
     """Извлекает прямые зависимости пакета по URL репозитория в словарь."""
     base_url = repo_url.rstrip("/")
@@ -102,10 +104,12 @@ def fetch_cargo_dependencies(repo_url, package, version):
 
     return dependencies
 
+
 def print_config(args):
     """Вывод параметров в формате ключ-значение."""
     for key, value in vars(args).items():
         print(f"{key} = {value}")
+
 
 def get_latest_version(repo_url, package):
     """Узнает последнюю стабильную версию пакета в репозитории Cargo."""
@@ -130,6 +134,7 @@ def load_test_repo(file_path):
     """Читает граф тестового репозитория из локального JSON-файла."""
     with open(file_path, "r", encoding="utf-8") as file:
         return json.load(file)
+
 
 def build_graph_dfs(package, args, test_data, visited, graph):
     """Рекурсивно строит граф зависимостей алгоритмом DFS."""
@@ -178,6 +183,7 @@ def find_reverse_dependencies(target_pkg, args, test_data):
             reverse_deps.append(candidate)
     return reverse_deps
 
+
 def print_reverse_dependencies(target_pkg, reverse_deps):
     """Выводит список обратных зависимостей для заданного пакета."""
     print(f"Обратные зависимости для пакета '{target_pkg}':")
@@ -186,10 +192,10 @@ def print_reverse_dependencies(target_pkg, reverse_deps):
     else:
         print("  нет обратных зависимостей")
 
+
 def generate_graphviz_dot(graph):
     """Формирует текстовое представление графа на языке Graphviz."""
-    lines = ["digraph Dependencies {"]
-    lines.append('node [shape=box, style="rounded"];')
+    lines = ["digraph Dependencies {", 'node [shape=box, style="rounded"];']
     for pkg, deps in graph.items():
         if not deps:
             lines.append(f'"{pkg}";')
@@ -197,6 +203,7 @@ def generate_graphviz_dot(graph):
             lines.append(f'"{pkg}" -> "{dep}";')
     lines.append("}")
     return "\n".join(lines)
+
 
 def save_graph_png(dot_code, output_path):
     """Вызывает программу Graphviz и сохраняет изображение графа в файл PNG."""
@@ -244,6 +251,7 @@ def print_ascii_tree(package, graph, prefix="", is_last=True,
             branch_visited=new_branch_visited,
         )
 
+
 def main():
     """Точка входа в программу."""
     parser = create_parser()
@@ -269,6 +277,7 @@ def main():
     except Exception as err:
         print(f"Ошибка конфигурации: {err}", file=sys.stderr)
         sys.exit(1)
+
 
 if __name__ == "__main__":
     main()
